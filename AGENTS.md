@@ -7,5 +7,6 @@ This repository uses [uv](https://docs.astral.sh/uv/) for Python dependency mana
 - Execute tools inside that environment with `uv run <command>`, e.g. `uv run pytest`.
 
 ## Testing
-- Tests expect `OPENAI_API_KEY` and `OPENAI_BASE_URL` in your environment. For local runs, place them in a `.env` file at the repo root (do not commit secrets).
+- Unit tests run without network access.
+- Integration tests are marked with `@pytest.mark.integration` and require `OPENAI_API_KEY` and `OPENAI_BASE_URL` in your environment. For local runs, place them in a `.env` file at the repo root (do not commit secrets).
 - The integration test makes a real request to `openai/gpt-5-nano` and will skip automatically if the API is unreachable.
