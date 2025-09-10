@@ -21,7 +21,9 @@ def test_chat_completion_integration():
     """chat_completion returns a message from the LLM."""
     try:
         result = chat_completion(
-            "Say hello in one word", model="openai/gpt-5-nano", max_tokens=5
+            "Say hello in one word",
+            model="openai/gpt-5-nano",
+            max_tokens=16,  # OpenRouter enforces a minimum of 16 tokens
         )
     except APIConnectionError as exc:  # pragma: no cover - network issues
         pytest.skip(f"API connection failed: {exc}")
