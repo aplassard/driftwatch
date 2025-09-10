@@ -1,20 +1,25 @@
 import os
-
-from dotenv import dotenv_values
+from pathlib import Path
 
 from driftwatch.llm import _ensure_env, chat_completion
 from openai import APIConnectionError
 import pytest
 
 
-def test_ensure_env_loads_dotenv(monkeypatch):
-    """_ensure_env loads credentials from .env when missing."""
+def test_ensure_env_loads_dotenv(monkeypatch, tmp_path: Path) -> None:
+    """_ensure_env loads credentials from a local .env when variables are missing."""
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        "OPENAI_API_KEY=dummy-key\nOPENAI_BASE_URL=https://example.com\n"
+    )
+    monkeypatch.setattr(
+        "dotenv.main.find_dotenv", lambda *args, **kwargs: str(env_file)
+    )
     _ensure_env()
-    values = dotenv_values(".env")
-    assert os.environ["OPENAI_API_KEY"] == values["OPENAI_API_KEY"]
-    assert os.environ["OPENAI_BASE_URL"] == values["OPENAI_BASE_URL"]
+    assert os.environ["OPENAI_API_KEY"] == "dummy-key"
+    assert os.environ["OPENAI_BASE_URL"] == "https://example.com"
 
 
 def test_chat_completion_integration():
