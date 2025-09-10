@@ -17,7 +17,7 @@ def test_openai_hello_world():
         result = chat_completion(
             "Say hello world",
             model="openai/gpt-5-nano",
-            max_tokens=16,
+            max_tokens=1024,
         )
     except APIConnectionError as exc:  # pragma: no cover - network issues
         pytest.skip(f"API connection failed: {exc}")

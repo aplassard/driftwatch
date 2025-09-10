@@ -50,5 +50,5 @@ def test_chat_completion_parses_response(monkeypatch) -> None:
     monkeypatch.setenv("OPENAI_BASE_URL", "https://example.com")
     monkeypatch.setattr("driftwatch.llm.OpenAI", DummyClient)
 
-    result = chat_completion("hi", model="openai/gpt-5-nano", max_tokens=16)
+    result = chat_completion("hi", model="openai/gpt-5-nano", max_tokens=1024)
     assert result == {"message": "hi", "usage": {"prompt_tokens": 1}}
