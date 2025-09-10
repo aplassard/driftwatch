@@ -6,4 +6,12 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "openai>=1.107.1",
+    "python-dotenv>=1.0.1",
 ]
+
+[dependency-groups]
+dev = ["pytest>=8.0.0"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+markers = ["integration: marks tests that call external LLM services"]
