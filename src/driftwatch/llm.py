@@ -60,8 +60,8 @@ def chat_completion(
                 max_tokens=max_tokens,
                 extra_body={"max_output_tokens": max_tokens},
                 extra_headers={
-                    "HTTP-Referer": "https://github.com/gavellm",
-                    "X-Title": "gavellm",
+                    "HTTP-Referer": "https://github.com/aplassard/driftwatch",
+                    "X-Title": "driftwatch",
                 },
             )
             break
