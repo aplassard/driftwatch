@@ -76,4 +76,5 @@ def chat_completion(
     return {
         "message": completion.choices[0].message.content,
         "usage": usage,
+        "response": completion,
     }
