@@ -8,6 +8,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 from typing import Iterable, Sequence
+from concurrent.futures import ThreadPoolExecutor
 
 from .datasets.gsm8k import load_test
 from .evaluator import extract_answer, PROMPT_TEMPLATE
@@ -37,12 +38,13 @@ def _completion_to_dict(obj: object) -> dict:
     return json.loads(json.dumps(obj, default=lambda o: o.__dict__))
 
 
-def run(index: int, models: Iterable[str], output_dir: Path) -> Path:
+def run(index: int, models: Iterable[str], output_dir: Path, threads: int = 1) -> Path:
     """Run the GSM8K problem at ``index`` against each ``models``.
 
     Results are written to ``output_dir`` as a JSONL file named with the start
     timestamp. Each line contains the prompt, raw response object, token usage
-    statistics and a boolean ``correct`` flag.
+    statistics and a boolean ``correct`` flag. Model evaluations are dispatched
+    across up to ``threads`` concurrent workers.
     """
 
     problems = load_test()
@@ -55,26 +57,31 @@ def run(index: int, models: Iterable[str], output_dir: Path) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
     out_file = output_dir / f"{start_time.strftime('%Y%m%d%H%M%S')}.jsonl"
 
+    def _evaluate(model: str) -> dict:
+        call_start = time.perf_counter()
+        result = chat_completion(prompt, model=model)
+        duration_ms = (time.perf_counter() - call_start) * 1000
+        usage = result.get("usage") or {}
+        predicted = extract_answer(result.get("message", ""))
+        response = _completion_to_dict(result.get("response"))
+        latency = response.get("response_ms", duration_ms)
+        return {
+            "model": model,
+            "index": index,
+            "prompt": prompt,
+            "response": response,
+            "correct": predicted == problem.answer,
+            "prompt_tokens": usage.get("prompt_tokens"),
+            "reasoning_tokens": usage.get("reasoning_tokens"),
+            "completion_tokens": usage.get("completion_tokens"),
+            "latency_ms": latency,
+        }
+
+    with ThreadPoolExecutor(max_workers=threads) as executor:
+        records = list(executor.map(_evaluate, models))
+
     with out_file.open("w", encoding="utf-8") as fh:
-        for model in models:
-            call_start = time.perf_counter()
-            result = chat_completion(prompt, model=model)
-            duration_ms = (time.perf_counter() - call_start) * 1000
-            usage = result.get("usage") or {}
-            predicted = extract_answer(result.get("message", ""))
-            response = _completion_to_dict(result.get("response"))
-            latency = response.get("response_ms", duration_ms)
-            record = {
-                "model": model,
-                "index": index,
-                "prompt": prompt,
-                "response": response,
-                "correct": predicted == problem.answer,
-                "prompt_tokens": usage.get("prompt_tokens"),
-                "reasoning_tokens": usage.get("reasoning_tokens"),
-                "completion_tokens": usage.get("completion_tokens"),
-                "latency_ms": latency,
-            }
+        for record in records:
             fh.write(json.dumps(record) + "\n")
 
     return out_file
@@ -95,8 +102,14 @@ def main(argv: Sequence[str] | None = None) -> None:
         default=Path("runs"),
         help="Directory to write JSONL results",
     )
+    parser.add_argument(
+        "--threads",
+        type=int,
+        default=1,
+        help="Number of concurrent threads to use",
+    )
     args = parser.parse_args(argv)
-    run(args.index, args.models, args.output_dir)
+    run(args.index, args.models, args.output_dir, threads=args.threads)
 
 
 if __name__ == "__main__":  # pragma: no cover - manual invocation
