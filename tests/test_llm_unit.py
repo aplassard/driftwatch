@@ -3,6 +3,8 @@ from pathlib import Path
 
 from driftwatch.llm import _ensure_env, chat_completion
 import pytest
+from openai import APIConnectionError
+import httpx
 
 
 def test_ensure_env_loads_dotenv(monkeypatch, tmp_path: Path) -> None:
@@ -84,4 +86,44 @@ def test_chat_completion_missing_choices_retries(monkeypatch) -> None:
 
     with pytest.raises(RuntimeError, match="Completion returned no choices"):
         chat_completion("hi", model="openai/gpt-5-nano", max_tokens=1024)
+    assert calls["count"] == 3
+
+
+def test_chat_completion_api_error_retries(monkeypatch) -> None:
+    """chat_completion retries on APIConnectionError from the client."""
+
+    calls = {"count": 0}
+
+    class DummyClient:
+        def __init__(self, *args, **kwargs):
+            self.chat = self.Chat()
+
+        class Chat:
+            def __init__(self):
+                self.completions = self.Completions()
+
+            class Completions:
+                def create(self, **kwargs):
+                    calls["count"] += 1
+                    if calls["count"] < 3:
+                        raise APIConnectionError(request=httpx.Request("POST", "https://example.com"))
+
+                    class Msg:
+                        content = "hi"
+
+                    class Choice:
+                        message = Msg()
+
+                    class Completion:
+                        choices = [Choice()]
+                        usage = {}
+
+                    return Completion()
+
+    monkeypatch.setenv("OPENAI_API_KEY", "key")
+    monkeypatch.setenv("OPENAI_BASE_URL", "https://example.com")
+    monkeypatch.setattr("driftwatch.llm.OpenAI", DummyClient)
+
+    result = chat_completion("hi", model="openai/gpt-5-nano", max_tokens=1024)
+    assert result["message"] == "hi"
     assert calls["count"] == 3
