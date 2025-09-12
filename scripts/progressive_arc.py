@@ -1,0 +1,92 @@
+#!/usr/bin/env python
+"""Progressively evaluate ARC-Challenge problems across multiple models."""
+
+from __future__ import annotations
+
+import argparse
+import json
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+from typing import Iterable, List, Tuple
+
+from tqdm.auto import tqdm
+
+from driftwatch.datasets.arc_challenge import load_test
+from driftwatch.evaluator import evaluate
+from driftwatch.data import Problem
+
+
+def _run_problem(problem: Problem, model: str, runs: int, threads: int) -> List[dict]:
+    """Evaluate ``problem`` ``runs`` times using ``model``."""
+
+    def _evaluate(_run: int) -> dict:
+        return evaluate(problem, model=model)
+
+    with ThreadPoolExecutor(max_workers=threads) as executor:
+        return list(executor.map(_evaluate, range(runs)))
+
+
+def _run_model(
+    model: str, problems: List[Tuple[int, Problem]], out_dir: Path, threads: int, runs: int = 10
+) -> List[dict]:
+    """Run ``model`` against each problem.
+
+    Returns a list of summary dictionaries containing the problem ``index`` and
+    ``correct`` count out of ``runs``.
+    """
+
+    model_dir = out_dir / model.replace("/", "_")
+    model_dir.mkdir(parents=True, exist_ok=True)
+    runs_path = model_dir / "runs.jsonl"
+    summary_path = model_dir / "summary.jsonl"
+    summary: List[dict] = []
+    with runs_path.open("w", encoding="utf-8") as runs_fh:
+        for index, problem in tqdm(problems, desc=model):
+            results = _run_problem(problem, model, runs=runs, threads=threads)
+            correct = sum(1 for r in results if r["correct"])
+            summary.append({"index": index, "correct": correct, "total": runs})
+            for run_index, result in enumerate(results):
+                record = {
+                    "index": index,
+                    "run": run_index,
+                    "correct": result["correct"],
+                    "expected": result.get("expected"),
+                    "response": result.get("response"),
+                }
+                runs_fh.write(json.dumps(record) + "\n")
+    with summary_path.open("w", encoding="utf-8") as summary_fh:
+        for record in summary:
+            summary_fh.write(json.dumps(record) + "\n")
+    return summary
+
+
+def main(argv: Iterable[str] | None = None) -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--sample", type=int, default=None, help="Run only the first N problems")
+    parser.add_argument("--threads", type=int, default=1, help="Concurrent threads for model calls")
+    parser.add_argument("--output-dir", type=Path, default=Path("runs"), help="Directory for run outputs")
+    args = parser.parse_args(argv)
+
+    problems = load_test()
+    if args.sample:
+        problems = problems[: args.sample]
+    indexed = list(enumerate(problems))
+
+    output_dir = args.output_dir
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    nano_summary = _run_model("openai/gpt-5-nano", indexed, output_dir, threads=args.threads)
+    remaining = [(s["index"], problems[s["index"]]) for s in nano_summary if s["correct"] < 9]
+    if remaining:
+        mini_summary = _run_model("openai/gpt-5-mini", remaining, output_dir, threads=args.threads)
+        remaining = [(s["index"], problems[s["index"]]) for s in mini_summary if s["correct"] < 9]
+        if remaining:
+            gpt_summary = _run_model("openai/gpt-5", remaining, output_dir, threads=args.threads)
+            flaky = [s for s in gpt_summary if 0 < s["correct"] < 9]
+            if flaky:
+                indices = [s["index"] for s in flaky]
+                print("Problems where openai/gpt-5 was inconsistent:", indices)
+
+
+if __name__ == "__main__":  # pragma: no cover - manual invocation
+    main()
