@@ -13,11 +13,11 @@ PROMPT_TEMPLATE = (
     "after four hash symbols like '#### 42'."
 )
 
-_ANSWER_RE = re.compile(r"####\s*([\d,.]+)")
+_ANSWER_RE = re.compile(r"####\s*([A-Za-z\d,.]+)")
 
 
 def extract_answer(text: str) -> str:
-    """Return the first number appearing after '####'."""
+    """Return the first token appearing after '####'."""
     match = _ANSWER_RE.search(text)
     if not match:
         return ""

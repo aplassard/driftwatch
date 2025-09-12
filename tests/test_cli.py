@@ -25,10 +25,10 @@ def test_run_writes_jsonl(tmp_path: Path) -> None:
     def fake_chat(prompt: str, model: str) -> dict:
         return fake_responses[model]
 
-    with patch("driftwatch.cli.load_test", return_value=[problem]):
+    with patch.dict("driftwatch.cli._DATASETS", {"dummy": lambda: [problem]}):
         with patch("driftwatch.cli.chat_completion", side_effect=fake_chat):
             with patch("driftwatch.cli._now", return_value=datetime(2024, 1, 1, 0, 0, 0)):
-                out_file = run(0, ["model-a", "model-b"], tmp_path, threads=2)
+                out_file = run("dummy", 0, ["model-a", "model-b"], tmp_path, threads=2)
 
     assert out_file.name == "20240101000000.jsonl"
     lines = out_file.read_text().splitlines()
@@ -43,3 +43,4 @@ def test_run_writes_jsonl(tmp_path: Path) -> None:
     assert rec_a["reasoning_tokens"] == 3
     assert rec_a["completion_tokens"] == 2
     assert rec_a["latency_ms"] == 50
+

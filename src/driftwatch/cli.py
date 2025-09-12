@@ -1,4 +1,4 @@
-"""Command line utilities for running GSM8K problems against LLMs."""
+"""Command line utilities for running benchmark problems against LLMs."""
 
 from __future__ import annotations
 
@@ -10,9 +10,16 @@ from pathlib import Path
 from typing import Iterable, Sequence
 from concurrent.futures import ThreadPoolExecutor
 
-from .datasets.gsm8k import load_test
+from .datasets.gsm8k import load_test as load_gsm8k_test
+from .datasets.arc_challenge import load_test as load_arc_test
 from .evaluator import extract_answer, PROMPT_TEMPLATE
 from .llm import chat_completion
+
+
+_DATASETS = {
+    "gsm8k": load_gsm8k_test,
+    "arc-challenge": load_arc_test,
+}
 
 
 def _now() -> datetime:
@@ -38,8 +45,10 @@ def _completion_to_dict(obj: object) -> dict:
     return json.loads(json.dumps(obj, default=lambda o: o.__dict__))
 
 
-def run(index: int, models: Iterable[str], output_dir: Path, threads: int = 1) -> Path:
-    """Run the GSM8K problem at ``index`` against each ``models``.
+def run(
+    dataset: str, index: int, models: Iterable[str], output_dir: Path, threads: int = 1
+) -> Path:
+    """Run the ``dataset`` problem at ``index`` against each ``models``.
 
     Results are written to ``output_dir`` as a JSONL file named with the start
     timestamp. Each line contains the prompt, raw response object, token usage
@@ -47,7 +56,10 @@ def run(index: int, models: Iterable[str], output_dir: Path, threads: int = 1) -
     across up to ``threads`` concurrent workers.
     """
 
-    problems = load_test()
+    loader = _DATASETS.get(dataset)
+    if loader is None:
+        raise ValueError(f"Unknown dataset {dataset}")
+    problems = loader()
     if index < 0 or index >= len(problems):
         raise IndexError(f"Problem index {index} out of range")
     problem = problems[index]
@@ -89,7 +101,8 @@ def run(index: int, models: Iterable[str], output_dir: Path, threads: int = 1) -
 
 def main(argv: Sequence[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--index", type=int, required=True, help="GSM8K test problem index")
+    parser.add_argument("--dataset", choices=_DATASETS.keys(), default="gsm8k", help="Dataset to evaluate")
+    parser.add_argument("--index", type=int, required=True, help="Test problem index")
     parser.add_argument(
         "--models",
         nargs="+",
@@ -109,7 +122,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         help="Number of concurrent threads to use",
     )
     args = parser.parse_args(argv)
-    run(args.index, args.models, args.output_dir, threads=args.threads)
+    run(args.dataset, args.index, args.models, args.output_dir, threads=args.threads)
 
 
 if __name__ == "__main__":  # pragma: no cover - manual invocation
