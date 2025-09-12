@@ -7,7 +7,7 @@ import time
 from json import JSONDecodeError
 
 import httpx
-from openai import OpenAI
+from openai import APIConnectionError, OpenAI
 
 MODEL_NAME = os.getenv("MODEL_NAME", "openai/gpt-5-nano")
 
@@ -78,7 +78,7 @@ def chat_completion(
                 time.sleep(2**attempt)
                 continue
             break
-        except (JSONDecodeError, httpx.HTTPError) as exc:  # pragma: no cover - network
+        except (JSONDecodeError, httpx.HTTPError, APIConnectionError) as exc:  # pragma: no cover - network
             if attempt == 2:
                 raise RuntimeError("Failed to retrieve completion") from exc
             time.sleep(2**attempt)
