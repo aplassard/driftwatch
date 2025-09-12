@@ -52,6 +52,7 @@ def chat_completion(
     # backoff.  If all retries fail, surface a more helpful ``RuntimeError`` so
     # callers don't see an opaque JSON decoding stack trace.
     completion = None
+    message_content = None
     for attempt in range(3):
         try:
             completion = client.chat.completions.create(
@@ -64,17 +65,29 @@ def chat_completion(
                     "X-Title": "driftwatch",
                 },
             )
+            if not getattr(completion, "choices", None):
+                if attempt == 2:
+                    raise RuntimeError("Completion returned no choices")
+                time.sleep(2**attempt)
+                continue
+            first = completion.choices[0]
+            message_content = getattr(getattr(first, "message", None), "content", None)
+            if message_content is None:
+                if attempt == 2:
+                    raise RuntimeError("Completion returned no message content")
+                time.sleep(2**attempt)
+                continue
             break
         except (JSONDecodeError, httpx.HTTPError) as exc:  # pragma: no cover - network
             if attempt == 2:
                 raise RuntimeError("Failed to retrieve completion") from exc
             time.sleep(2**attempt)
-    assert completion is not None  # for type checkers
+    assert completion is not None and message_content is not None  # for type checkers
     usage = getattr(completion, "usage", None)
     if hasattr(usage, "model_dump"):
         usage = usage.model_dump()
     return {
-        "message": completion.choices[0].message.content,
+        "message": message_content,
         "usage": usage,
         "response": completion,
     }

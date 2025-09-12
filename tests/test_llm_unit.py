@@ -54,3 +54,34 @@ def test_chat_completion_parses_response(monkeypatch) -> None:
     assert result["message"] == "hi"
     assert result["usage"] == {"prompt_tokens": 1}
     assert "response" in result
+
+
+def test_chat_completion_missing_choices_retries(monkeypatch) -> None:
+    """chat_completion retries when no choices are returned."""
+
+    calls = {"count": 0}
+
+    class DummyClient:
+        def __init__(self, *args, **kwargs):
+            self.chat = self.Chat()
+
+        class Chat:
+            def __init__(self):
+                self.completions = self.Completions()
+
+            class Completions:
+                def create(self, **kwargs):
+                    calls["count"] += 1
+                    class Completion:
+                        choices = None
+                        usage = {}
+
+                    return Completion()
+
+    monkeypatch.setenv("OPENAI_API_KEY", "key")
+    monkeypatch.setenv("OPENAI_BASE_URL", "https://example.com")
+    monkeypatch.setattr("driftwatch.llm.OpenAI", DummyClient)
+
+    with pytest.raises(RuntimeError, match="Completion returned no choices"):
+        chat_completion("hi", model="openai/gpt-5-nano", max_tokens=1024)
+    assert calls["count"] == 3
