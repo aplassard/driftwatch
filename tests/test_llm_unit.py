@@ -58,6 +58,15 @@ def test_chat_completion_parses_response(monkeypatch) -> None:
     assert "response" in result
 
 
+def test_chat_completion_rejects_invalid_base_url(monkeypatch) -> None:
+    """chat_completion raises when OPENAI_BASE_URL lacks a scheme."""
+
+    monkeypatch.setenv("OPENAI_API_KEY", "key")
+    monkeypatch.setenv("OPENAI_BASE_URL", "example.com")
+    with pytest.raises(RuntimeError, match="Invalid OPENAI_BASE_URL"):
+        chat_completion("hi", model="openai/gpt-5-nano", max_tokens=1024)
+
+
 def test_chat_completion_missing_choices_retries(monkeypatch) -> None:
     """chat_completion retries when no choices are returned."""
 
