@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import time
 from json import JSONDecodeError
+from urllib.parse import urlparse
 
 import httpx
 from openai import APIConnectionError, OpenAI
@@ -42,6 +43,11 @@ def chat_completion(
     client_kwargs = {"api_key": os.environ["OPENAI_API_KEY"]}
     base_url = os.getenv("OPENAI_BASE_URL")
     if base_url:
+        parsed = urlparse(base_url)
+        if not parsed.scheme or not parsed.netloc:
+            raise RuntimeError(
+                f"Invalid OPENAI_BASE_URL: {base_url!r}. Include scheme, e.g. 'https://api.openai.com/v1'."
+            )
         client_kwargs["base_url"] = base_url
     client = OpenAI(**client_kwargs)
     target_model = model or MODEL_NAME
