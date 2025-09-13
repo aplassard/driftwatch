@@ -5,7 +5,12 @@ from driftwatch import evaluate
 def test_natalia_clips(monkeypatch):
     prompts = {}
 
-    def fake_chat_completion(prompt: str, model: str | None = None, max_tokens: int = 10240):
+    def fake_chat_completion(
+        prompt: str,
+        model: str | None = None,
+        max_tokens: int = 10240,
+        temperature: float = 0.7,
+    ):
         prompts["prompt"] = prompt
         return {
             "message": (

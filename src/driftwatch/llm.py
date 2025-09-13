@@ -32,12 +32,14 @@ def chat_completion(
     prompt: str,
     model: str | None = None,
     max_tokens: int = 10_240,
+    temperature: float = 0.7,
 ) -> dict:
     """Return the assistant message and token usage details.
 
     The returned dictionary contains the assistant ``message`` along with ``usage``
     statistics (prompt, cache, reasoning and completion tokens) and ``cost`` for
-    each token type when pricing information is available for ``model``.
+    each token type when pricing information is available for ``model``. The
+    ``temperature`` controls sampling diversity and defaults to ``0.7``.
     """
     _ensure_env()
     client_kwargs = {"api_key": os.environ["OPENAI_API_KEY"]}
@@ -65,6 +67,7 @@ def chat_completion(
                 model=target_model,
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=max_tokens,
+                temperature=temperature,
                 extra_body={"max_output_tokens": max_tokens},
                 extra_headers={
                     "HTTP-Referer": "https://github.com/aplassard/driftwatch",

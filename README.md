@@ -11,11 +11,12 @@ uv sync --dev
 
 Run a specific test problem from either the GSM8K or ARC-Challenge benchmarks
 against one or more models. Select the dataset with ``--dataset`` (defaults to
-``gsm8k``). The results are written as a JSONL file in the provided output
+``gsm8k``). Control sampling diversity with ``--temperature`` (defaults to
+``0.7``). The results are written as a JSONL file in the provided output
 directory. The file name is the timestamp at the start of the run.
 
 ```bash
-uv run python -m driftwatch.cli --dataset arc-challenge --index 5 --models openai/gpt-5-nano other/model --threads 2 --output-dir results/
+uv run python -m driftwatch.cli --dataset arc-challenge --index 5 --models openai/gpt-5-nano other/model --threads 2 --temperature 0.7 --output-dir results/
 ```
 
 Each line contains the prompt, raw OpenAI response object, token usage, latency,
