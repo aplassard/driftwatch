@@ -50,26 +50,45 @@ def _run_model(
     model_dir.mkdir(parents=True, exist_ok=True)
     runs_path = model_dir / "runs.jsonl"
     summary_path = model_dir / "summary.jsonl"
+
+    # Load existing summary records so we can skip completed problems
     summary: List[dict] = []
-    with runs_path.open("w", encoding="utf-8") as runs_fh:
+    completed: set[int] = set()
+    if summary_path.exists():
+        with summary_path.open("r", encoding="utf-8") as fh:
+            for line in fh:
+                record = json.loads(line)
+                summary.append(record)
+                completed.add(record["index"])
+
+    # Append new run results and summary records as we go so progress is saved
+    runs_fh = runs_path.open("a", encoding="utf-8")
+    summary_fh = summary_path.open("a", encoding="utf-8")
+    try:
         for index, problem in tqdm(problems, desc=model):
+            if index in completed:
+                continue
             results = _run_problem(
                 problem, model, runs=runs, threads=threads, temperature=temperature
             )
             correct = sum(1 for r in results if r["correct"])
-            summary.append({"index": index, "correct": correct, "total": runs})
+            record = {"index": index, "correct": correct, "total": runs}
+            summary.append(record)
+            summary_fh.write(json.dumps(record) + "\n")
+            summary_fh.flush()
             for run_index, result in enumerate(results):
-                record = {
+                run_record = {
                     "index": index,
                     "run": run_index,
                     "correct": result["correct"],
                     "expected": result.get("expected"),
                     "response": result.get("response"),
                 }
-                runs_fh.write(json.dumps(record) + "\n")
-    with summary_path.open("w", encoding="utf-8") as summary_fh:
-        for record in summary:
-            summary_fh.write(json.dumps(record) + "\n")
+                runs_fh.write(json.dumps(run_record) + "\n")
+            runs_fh.flush()
+    finally:
+        runs_fh.close()
+        summary_fh.close()
     return summary
 
 
