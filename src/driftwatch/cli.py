@@ -46,7 +46,12 @@ def _completion_to_dict(obj: object) -> dict:
 
 
 def run(
-    dataset: str, index: int, models: Iterable[str], output_dir: Path, threads: int = 1
+    dataset: str,
+    index: int,
+    models: Iterable[str],
+    output_dir: Path,
+    threads: int = 1,
+    temperature: float = 0.7,
 ) -> Path:
     """Run the ``dataset`` problem at ``index`` against each ``models``.
 
@@ -71,7 +76,7 @@ def run(
 
     def _evaluate(model: str) -> dict:
         call_start = time.perf_counter()
-        result = chat_completion(prompt, model=model)
+        result = chat_completion(prompt, model=model, temperature=temperature)
         duration_ms = (time.perf_counter() - call_start) * 1000
         usage = result.get("usage") or {}
         predicted = extract_answer(result.get("message", ""))
@@ -121,8 +126,21 @@ def main(argv: Sequence[str] | None = None) -> None:
         default=1,
         help="Number of concurrent threads to use",
     )
+    parser.add_argument(
+        "--temperature",
+        type=float,
+        default=0.7,
+        help="Sampling temperature for LLM calls",
+    )
     args = parser.parse_args(argv)
-    run(args.dataset, args.index, args.models, args.output_dir, threads=args.threads)
+    run(
+        args.dataset,
+        args.index,
+        args.models,
+        args.output_dir,
+        threads=args.threads,
+        temperature=args.temperature,
+    )
 
 
 if __name__ == "__main__":  # pragma: no cover - manual invocation

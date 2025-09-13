@@ -22,7 +22,10 @@ def test_run_writes_jsonl(tmp_path: Path) -> None:
         },
     }
 
-    def fake_chat(prompt: str, model: str) -> dict:
+    temps = {}
+
+    def fake_chat(prompt: str, model: str, temperature: float = 0.7) -> dict:
+        temps[model] = temperature
         return fake_responses[model]
 
     with patch.dict("driftwatch.cli._DATASETS", {"dummy": lambda: [problem]}):
@@ -43,4 +46,5 @@ def test_run_writes_jsonl(tmp_path: Path) -> None:
     assert rec_a["reasoning_tokens"] == 3
     assert rec_a["completion_tokens"] == 2
     assert rec_a["latency_ms"] == 50
+    assert temps == {"model-a": 0.7, "model-b": 0.7}
 
