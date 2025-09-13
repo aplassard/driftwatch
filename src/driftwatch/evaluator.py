@@ -24,10 +24,12 @@ def extract_answer(text: str) -> str:
     return match.group(1).replace(",", "")
 
 
-def evaluate(problem: Problem, model: str | None = None) -> dict:
+def evaluate(
+    problem: Problem, model: str | None = None, *, temperature: float = 0.7
+) -> dict:
     """Run ``problem`` against the LLM and check the final answer."""
     prompt = PROMPT_TEMPLATE.format(question=problem.question)
-    result = chat_completion(prompt, model=model)
+    result = chat_completion(prompt, model=model, temperature=temperature)
     predicted = extract_answer(result["message"]) if result["message"] else ""
     return {
         "response": result["message"],
