@@ -16,18 +16,29 @@ from driftwatch.evaluator import evaluate
 from driftwatch.data import Problem
 
 
-def _run_problem(problem: Problem, model: str, runs: int, threads: int) -> List[dict]:
+def _run_problem(
+    problem: Problem,
+    model: str,
+    runs: int,
+    threads: int,
+    temperature: float,
+) -> List[dict]:
     """Evaluate ``problem`` ``runs`` times using ``model``."""
 
     def _evaluate(_run: int) -> dict:
-        return evaluate(problem, model=model)
+        return evaluate(problem, model=model, temperature=temperature)
 
     with ThreadPoolExecutor(max_workers=threads) as executor:
         return list(executor.map(_evaluate, range(runs)))
 
 
 def _run_model(
-    model: str, problems: List[Tuple[int, Problem]], out_dir: Path, threads: int, runs: int = 10
+    model: str,
+    problems: List[Tuple[int, Problem]],
+    out_dir: Path,
+    threads: int,
+    runs: int = 10,
+    temperature: float = 0.0,
 ) -> List[dict]:
     """Run ``model`` against each problem.
 
@@ -42,7 +53,9 @@ def _run_model(
     summary: List[dict] = []
     with runs_path.open("w", encoding="utf-8") as runs_fh:
         for index, problem in tqdm(problems, desc=model):
-            results = _run_problem(problem, model, runs=runs, threads=threads)
+            results = _run_problem(
+                problem, model, runs=runs, threads=threads, temperature=temperature
+            )
             correct = sum(1 for r in results if r["correct"])
             summary.append({"index": index, "correct": correct, "total": runs})
             for run_index, result in enumerate(results):
@@ -65,6 +78,9 @@ def main(argv: Iterable[str] | None = None) -> None:
     parser.add_argument("--sample", type=int, default=None, help="Run only the first N problems")
     parser.add_argument("--threads", type=int, default=1, help="Concurrent threads for model calls")
     parser.add_argument("--output-dir", type=Path, default=Path("runs"), help="Directory for run outputs")
+    parser.add_argument(
+        "--temperature", type=float, default=0.0, help="Sampling temperature for model calls"
+    )
     args = parser.parse_args(argv)
 
     problems = load_test()
@@ -75,13 +91,27 @@ def main(argv: Iterable[str] | None = None) -> None:
     output_dir = args.output_dir
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    nano_summary = _run_model("openai/gpt-5-nano", indexed, output_dir, threads=args.threads)
+    nano_summary = _run_model(
+        "openai/gpt-5-nano", indexed, output_dir, threads=args.threads, temperature=args.temperature
+    )
     remaining = [(s["index"], problems[s["index"]]) for s in nano_summary if s["correct"] < 9]
     if remaining:
-        mini_summary = _run_model("openai/gpt-5-mini", remaining, output_dir, threads=args.threads)
+        mini_summary = _run_model(
+            "openai/gpt-5-mini",
+            remaining,
+            output_dir,
+            threads=args.threads,
+            temperature=args.temperature,
+        )
         remaining = [(s["index"], problems[s["index"]]) for s in mini_summary if s["correct"] < 9]
         if remaining:
-            gpt_summary = _run_model("openai/gpt-5", remaining, output_dir, threads=args.threads)
+            gpt_summary = _run_model(
+                "openai/gpt-5",
+                remaining,
+                output_dir,
+                threads=args.threads,
+                temperature=args.temperature,
+            )
             flaky = [s for s in gpt_summary if 0 < s["correct"] < 9]
             if flaky:
                 indices = [s["index"] for s in flaky]
