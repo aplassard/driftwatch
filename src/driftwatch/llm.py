@@ -7,6 +7,9 @@ import time
 from json import JSONDecodeError
 from urllib.parse import urlparse
 
+import atexit
+import threading
+
 import httpx
 from openai import APIConnectionError, OpenAI
 
@@ -28,6 +31,61 @@ def _ensure_env() -> None:
         raise RuntimeError("Missing required environment variable: OPENAI_API_KEY")
 
 
+_client_lock = threading.Lock()
+_client: OpenAI | None = None
+_client_params: tuple[str, str | None] | None = None
+_client_ctor: type[OpenAI] | None = None
+
+
+def _get_client() -> OpenAI:
+    """Return a shared OpenAI client instance."""
+    global _client, _client_params, _client_ctor
+    current_params = (os.getenv("OPENAI_API_KEY"), os.getenv("OPENAI_BASE_URL"))
+    current_ctor = OpenAI
+    if (
+        _client is None
+        or _client_params != current_params
+        or _client_ctor is not current_ctor
+    ):
+        with _client_lock:
+            current_params = (os.getenv("OPENAI_API_KEY"), os.getenv("OPENAI_BASE_URL"))
+            current_ctor = OpenAI
+            if (
+                _client is None
+                or _client_params != current_params
+                or _client_ctor is not current_ctor
+            ):
+                _ensure_env()
+                api_key = os.environ["OPENAI_API_KEY"]
+                base_url = os.getenv("OPENAI_BASE_URL")
+                client_kwargs = {"api_key": api_key}
+                if base_url:
+                    parsed = urlparse(base_url)
+                    if not parsed.scheme or not parsed.netloc:
+                        raise RuntimeError(
+                            f"Invalid OPENAI_BASE_URL: {base_url!r}. Include scheme, e.g. 'https://api.openai.com/v1'."
+                        )
+                    client_kwargs["base_url"] = base_url
+                if _client is not None and hasattr(_client, "close"):
+                    _client.close()
+                _client = current_ctor(**client_kwargs)
+                _client_params = (api_key, base_url)
+                _client_ctor = current_ctor
+    return _client
+
+
+def _close_client() -> None:
+    """Close the shared OpenAI client on interpreter shutdown."""
+    global _client
+    if _client is not None:
+        if hasattr(_client, "close"):
+            _client.close()
+        _client = None
+
+
+atexit.register(_close_client)
+
+
 def chat_completion(
     prompt: str,
     model: str | None = None,
@@ -41,17 +99,7 @@ def chat_completion(
     each token type when pricing information is available for ``model``. The
     ``temperature`` controls sampling diversity and defaults to ``0.7``.
     """
-    _ensure_env()
-    client_kwargs = {"api_key": os.environ["OPENAI_API_KEY"]}
-    base_url = os.getenv("OPENAI_BASE_URL")
-    if base_url:
-        parsed = urlparse(base_url)
-        if not parsed.scheme or not parsed.netloc:
-            raise RuntimeError(
-                f"Invalid OPENAI_BASE_URL: {base_url!r}. Include scheme, e.g. 'https://api.openai.com/v1'."
-            )
-        client_kwargs["base_url"] = base_url
-    client = OpenAI(**client_kwargs)
+    client = _get_client()
     target_model = model or MODEL_NAME
     # ``openai`` occasionally returns malformed JSON or encounters transient
     # network issues.  These manifest as ``JSONDecodeError`` or ``httpx``
